@@ -63,3 +63,14 @@ C:\Users\ILS\Desktop\GitHub\Projects\Reseter\Reseter\Reseter\bin\Debug\EasyHttp.
 C:\Users\ILS\Desktop\GitHub\Projects\Reseter\Reseter\Reseter\bin\Debug\JsonFx.xml
 C:\Users\ILS\Desktop\GitHub\Projects\Reseter\Reseter\Reseter\bin\Debug\Newtonsoft.Json.xml
 C:\Users\ILS\Desktop\GitHub\Projects\Reseter\Reseter\Reseter\obj\Debug\Reseter.csprojResolveAssemblyReference.cache
+C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\bin\Debug\Reseter.exe.config
+C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\bin\Debug\Reseter.exe
+C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\bin\Debug\Reseter.pdb
+C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\bin\Debug\EasyHttp.dll
+C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\bin\Debug\JsonFx.dll
+C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\bin\Debug\Newtonsoft.Json.dll
+C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\bin\Debug\EasyHttp.pdb
+C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\bin\Debug\JsonFx.xml
+C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\bin\Debug\Newtonsoft.Json.xml
+C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\obj\Debug\Reseter.exe
+C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\obj\Debug\Reseter.pdb
