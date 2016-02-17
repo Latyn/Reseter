@@ -74,3 +74,4 @@ C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\bin\Debug\JsonFx.xml
 C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\bin\Debug\Newtonsoft.Json.xml
 C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\obj\Debug\Reseter.exe
 C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\obj\Debug\Reseter.pdb
+C:\Users\Latyn\Documents\GitHub\Reseter\Reseter\Reseter\obj\Debug\Reseter.csprojResolveAssemblyReference.cache

@@ -19,7 +19,8 @@ namespace Reseter.Courts_Reset
         private string CourtListenerUrl = "https://www.courtlistener.com";
         private StateDictionary StatesDictionary;
 
-        public APIReset() {
+        public APIReset()
+        {
             // Initialize single db connection
             m_db = new SqlConnection(ConfigurationManager.ConnectionStrings["CaseLawContext"].ConnectionString);
 
@@ -34,12 +35,14 @@ namespace Reseter.Courts_Reset
             m_db.Open();
         }
 
-        public void Process() {
+        public void Process()
+        {
+            try
+            {
+                var CourtDictionary = new Dictionary<string, string>();
+                var count = 0;
+                DateTime start = DateTime.Now;
 
-            var CourtDictionary = new Dictionary<string, string>();
-            var count = 0;
-            DateTime start = DateTime.Now;
-          
                 Console.WriteLine("Fetching OpinionDocuments");
                 foreach (var Document in GetOpinionDocuments())
                 {
@@ -54,31 +57,36 @@ namespace Reseter.Courts_Reset
                     var SourceNumber = Document.SourceFile.TrimEnd('/').Split('/').ToList().Last();
 
                     // Get the file from the bulk data that matches the Document Id
-                    
+
                     // v2 json format case has document type null, getting docket from docket url
                     TempDocument = GetFromBulk(SourceNumber);
-
-                    
-                    if (TempDocument.CourtUrl == String.Empty || TempDocument.CourtUrl == null)
-                    {
-
-                    TempDocument = GetFromAPI(SourceNumber);
-                    }
 
                     if (TempDocument == null)
                     {
                         TempDocument = GetFromAPI(SourceNumber);
                     }
+                    else
+                    {
+                        if (TempDocument.CourtUrl == String.Empty || TempDocument.CourtUrl == null)
+                        {
+
+                            TempDocument = GetFromAPI(SourceNumber);
+                        }
+                    }
 
 
                     CheckCourts(TempDocument, Document, SourceNumber);
                 }
+            }
+            catch (Exception)
+            {
+                System.Environment.Exit(1);
+            }
 
         }
 
         private ApiDocument GetFromBulk(string SourceNumber)
         {
-            var typeOfQuery = string.Empty;
             ApiDocument TempDocument = new ApiDocument();
 
             TempDocument = GetDocumentFromBulkData(SourceNumber);
@@ -116,14 +124,14 @@ namespace Reseter.Courts_Reset
             return TempDocument;
         }
 
-        private void CheckCourts( ApiDocument TempDocument, OpinionDocument Document, string SourceNumber)
+        private void CheckCourts(ApiDocument TempDocument, OpinionDocument Document, string SourceNumber)
         {
             var CourtDictionary = new Dictionary<string, string>();
 
             if (TempDocument != null)
             {
 
-                string CourtId = TempDocument.CourtUrl.TrimEnd('/').Split('/').ToList().Last();
+                string CourtId = TempDocument.CourtUrl.Replace("/?format=json", "").TrimEnd('/').Split('/').ToList().Last();
 
                 //Adding sourcefile from bulk
                 //if (TempDocument.Citation != null)
@@ -152,7 +160,6 @@ namespace Reseter.Courts_Reset
                     var TempCourt = GetCourtFromAPI(CourtId);
                     TempCourt.CourtId = CourtId;
 
-
                     if (TempCourt != null)
                     {
                         CheckCourt(TempCourt, TempDocument, Document, SourceNumber, CourtId);
@@ -161,7 +168,7 @@ namespace Reseter.Courts_Reset
                     {
                         Console.WriteLine("The court with the Code URL: " + TempDocument.CourtUrl + " couldn't be found.");
                     }
-                }               
+                }
             }
             else
             {
@@ -171,21 +178,21 @@ namespace Reseter.Courts_Reset
 
         private void CheckCourt(Court TempCourt, ApiDocument TempDocument, OpinionDocument Document, string SourceNumber, string CourtId)
         {
-                Document.SourceFile = "/api/rest/v3/opinions/" + SourceNumber + "/";
+            Document.SourceFile = "/api/rest/v3/opinions/" + SourceNumber + "/";
 
-                // Verify if the state exists on the state dictionary
-                if (StatesDictionary.GetDictionary().ContainsKey(CourtId))
+            // Verify if the state exists on the state dictionary
+            if (StatesDictionary.GetDictionary().ContainsKey(CourtId))
+            {
+
+                // Fetch the state from the state dictionary
+                string state = StatesDictionary.GetDictionary()[CourtId];
+
+                // Update the court and state of the Opiniond Document
+                if (UpdateDocumentValues(Document.Id, Document.SourceFile, TempCourt.Name, TempDocument.Citation.caseName, state, TempDocument.Docket))
                 {
-
-                    // Fetch the state from the state dictionary
-                    string state = StatesDictionary.GetDictionary()[CourtId];
-
-                    // Update the court and state of the Opiniond Document
-                    if (UpdateDocumentValues(Document.Id, Document.SourceFile, TempCourt.Name, TempDocument.Citation.caseName, state, TempDocument.Docket))
-                    {
-                        Log(Document.Id.ToString());
-                    }
+                    Log(Document.Id.ToString());
                 }
+            }
         }
 
         /// <summary>
@@ -195,33 +202,34 @@ namespace Reseter.Courts_Reset
         {
             Console.WriteLine("Getting opinions");
 
-                using (var cmd = m_db.CreateCommand())
-                {
+            using (var cmd = m_db.CreateCommand())
+            {
                 Console.WriteLine(m_db.State);
-                    cmd.CommandTimeout = 0;
-                    cmd.CommandText = @"select o.OpinionDocumentId, o.SourceFile
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"select o.OpinionDocumentId, o.SourceFile
                                     from OpinionDocuments as o
                                     where o.SourceFile like '%api%'
                                     and o.DataFixed = 0";
 
-                    using (var reader = cmd.ExecuteReader())
-                    {
+                using (var reader = cmd.ExecuteReader())
+                {
                     Console.WriteLine(reader.HasRows);
 
                     while (reader.Read())
-                        {
-                            int Id = Convert.ToInt32(reader["OpinionDocumentId"]);
-                            string SourceFile = reader["SourceFile"].ToString();
-                            yield return new OpinionDocument(Id, SourceFile);
-                        }
+                    {
+                        int Id = Convert.ToInt32(reader["OpinionDocumentId"]);
+                        string SourceFile = reader["SourceFile"].ToString();
+                        yield return new OpinionDocument(Id, SourceFile);
                     }
                 }
+            }
         }
 
         /// <summary>
         /// Gets a json file from the bulk data that matches a given id
         /// </summary>
-        private ApiDocument GetDocumentFromBulkData(string FileId) {
+        private ApiDocument GetDocumentFromBulkData(string FileId)
+        {
             string FilePath = BulkDataPath + "\\" + FileId + ".json";
             if (File.Exists(FilePath))
             {
@@ -237,14 +245,16 @@ namespace Reseter.Courts_Reset
         /// <summary>
         /// Retrieves the court data from CourtListener
         /// </summary>
-        private Court GetCourtFromAPI(string CourtUrl) {
+        private Court GetCourtFromAPI(string CourtUrl)
+        {
             var http = new HttpClient();
-            
+
             // Configure the client
             http.Request.Accept = HttpContentTypes.ApplicationJson;
             http.Request.ForceBasicAuth = true;
             http.Request.SetBasicAuthentication("peidelman", "Dyn4m1c5!");
-            var fullUrl = string.Format("{0}/{1}/{2}", CourtListenerUrl, "/api/rest/v3/courts/", CourtUrl + "/");
+            var fullUrl = string.Format("{0}/{1}/{2}", CourtListenerUrl, "api/rest/v3/courts", CourtUrl + "/");
+            //fullUrl = fullUrl.Replace("//", "/");
 
             // Retrieves the response from CourtListener API
             var response = http.Get(fullUrl);
@@ -265,13 +275,14 @@ namespace Reseter.Courts_Reset
         /// </summary>
         private ApiDocument GetDocumentFromAPI(string DocumentUrl)
         {
+            ApiDocument temp = new ApiDocument();
             var http = new HttpClient();
             var tempApiCluster = new APICluster();
             // Configure the client
             http.Request.Accept = HttpContentTypes.ApplicationJson;
             http.Request.ForceBasicAuth = true;
             http.Request.SetBasicAuthentication("peidelman", "Dyn4m1c5!");
-            var query = string.Format("{0}/{1}/{2}", CourtListenerUrl, "api/rest/v3/clusters", DocumentUrl);
+            var query = string.Format("{0}/{1}/{2}", CourtListenerUrl, "api/rest/v3/clusters", DocumentUrl + "/?format=json");
             // Retrieves the response from CourtListener API
             var response = http.Get(query);
 
@@ -293,10 +304,7 @@ namespace Reseter.Courts_Reset
                 return null;
             }
 
-           // var responseCourt = http.Get(tempApiDocument.Docket);
-
-
-
+            // var responseCourt = http.Get(tempApiDocument.Docket);
             // return deserialized court
             return JsonConvert.DeserializeObject<ApiDocument>(responseCourt.RawText);
         }
@@ -333,7 +341,7 @@ namespace Reseter.Courts_Reset
         /// <summary>
         /// Updates the court and state of a given document
         /// </summary>
-        private bool UpdateDocumentValues(int Id, string SourceFile, string Court, string Title, string State,string DocketNumber)
+        private bool UpdateDocumentValues(int Id, string SourceFile, string Court, string Title, string State, string DocketNumber)
         {
             var result = false;
 
