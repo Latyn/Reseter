@@ -4,11 +4,12 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Configuration;
 using System.IO;
-using EasyHttp.Http;
-using Reseter.Entities;
+//using EasyHttp.Http;
+using Reseter.RequestManager;
 using Newtonsoft.Json;
 using System.Linq;
 using Reseter.Utilities;
+using System.Net.Http;
 
 namespace Reseter.Courts_Reset
 {
@@ -18,6 +19,7 @@ namespace Reseter.Courts_Reset
         private string BulkDataPath;
         private string CourtListenerUrl = "https://www.courtlistener.com";
         private StateDictionary StatesDictionary;
+        public Dictionary<string, string> CourtDictionary = new Dictionary<string, string>();
 
         public APIReset()
         {
@@ -37,10 +39,11 @@ namespace Reseter.Courts_Reset
 
         public void Process()
         {
-            try
-            {
+
                 var CourtDictionary = new Dictionary<string, string>();
                 var count = 0;
+                var ApiCount = 0;
+                var BulkCount = 0;
                 DateTime start = DateTime.Now;
 
                 Console.WriteLine("Fetching OpinionDocuments");
@@ -50,7 +53,7 @@ namespace Reseter.Courts_Reset
 
                     count = count + 1;
 
-                    Console.WriteLine("Checked documents= " + count + " from " + start.ToString("HH:mm:ss") + " to " + DateTime.Now.ToString("HH:mm:ss"));
+                    Console.WriteLine("From " + start.ToString("HH:mm:ss") + " to " + DateTime.Now.ToString("HH:mm:ss"));
 
                     Console.WriteLine("Processing Opinion Document: " + Document.Id.ToString() + ", " + Document.SourceFile);
 
@@ -63,28 +66,50 @@ namespace Reseter.Courts_Reset
 
                     if (TempDocument == null)
                     {
-                        TempDocument = GetFromAPI(SourceNumber);
+                         ApiCount = ApiCount + 1;
+                         TempDocument = GetFromAPI(SourceNumber);
+
+                            // if it is not gotten from bulk or API set Datafixed as null  and go to next item
+                            if (TempDocument == null)
+                            {
+                                if (setDataFixed(Document.SourceFile))
+                                {
+                                    continue;
+                                }                                             
+                            }
                     }
                     else
                     {
-                        if (TempDocument.CourtUrl == String.Empty || TempDocument.CourtUrl == null)
-                        {
-
-                            TempDocument = GetFromAPI(SourceNumber);
-                        }
+                         BulkCount = BulkCount + 1;
                     }
 
-
                     CheckCourts(TempDocument, Document, SourceNumber);
-                }
-            }
-            catch (Exception)
-            {
-                System.Environment.Exit(1);
+                Console.WriteLine("Total= " + count + " Checked from API " + ApiCount + " Bulk " + BulkCount);
             }
 
         }
+        private bool setDataFixed(string SourceFile)
+        {
+            var result = false;
 
+            using (var cmd = m_db.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"update OpinionDocuments
+                                    set DataFixed = @value
+                                    where SourceFile = @sourcefile";
+
+                cmd.Parameters.Add("value", SqlDbType.VarChar).Value = DBNull.Value;
+                cmd.Parameters.Add("sourcefile", SqlDbType.VarChar).Value = SourceFile;
+
+                if (cmd.ExecuteNonQuery() > 0)
+                {
+                    result = true;
+                }
+            }
+
+            return result;
+        }
         private ApiDocument GetFromBulk(string SourceNumber)
         {
             ApiDocument TempDocument = new ApiDocument();
@@ -118,15 +143,19 @@ namespace Reseter.Courts_Reset
 
             // Get the document from Court Listener that matches the Document Source File
             TempDocument = GetDocumentFromAPI(SourceNumber);
-            //Value came from a diferent hierarchy so we get it and then stored at the same value than bulk data has
-            TempDocument.Citation.caseName = TempDocument.caseName;
+
+            if (TempDocument != null)
+            {
+                //Value came from a diferent hierarchy so we get it and then stored at the same value than bulk data has
+                TempDocument.Citation.caseName = TempDocument.caseName;
+            }
 
             return TempDocument;
         }
 
         private void CheckCourts(ApiDocument TempDocument, OpinionDocument Document, string SourceNumber)
         {
-            var CourtDictionary = new Dictionary<string, string>();
+            Court TempCourt= new Court("","");
 
             if (TempDocument != null)
             {
@@ -142,10 +171,14 @@ namespace Reseter.Courts_Reset
                 // Verify if the court exists on the cache CourtDictionary
                 if (CourtDictionary.ContainsKey(CourtId))
                 {
-                    var TempCourt = new Court(CourtId, CourtDictionary[CourtId]);
+                    Console.WriteLine("Contains Court "+ CourtId);
+
+                    TempCourt.CourtId = CourtId;
+                    TempCourt.Name = (CourtDictionary[CourtId]);
 
                     if (TempCourt != null)
                     {
+                        
                         CheckCourt(TempCourt, TempDocument, Document, SourceNumber, CourtId);
                     }
                     else
@@ -157,11 +190,14 @@ namespace Reseter.Courts_Reset
                 {
                     // Get the Court of a Document from Court Listener
 
-                    var TempCourt = GetCourtFromAPI(CourtId);
+                    TempCourt = GetCourtFromAPI(CourtId);
                     TempCourt.CourtId = CourtId;
+
+                    
 
                     if (TempCourt != null)
                     {
+                        CourtDictionary.Add(TempCourt.CourtId, TempCourt.Name);
                         CheckCourt(TempCourt, TempDocument, Document, SourceNumber, CourtId);
                     }
                     else
@@ -237,7 +273,6 @@ namespace Reseter.Courts_Reset
             }
             else
             {
-                Console.WriteLine("Getting from Bulk");
                 return null;
             }
         }
@@ -247,27 +282,30 @@ namespace Reseter.Courts_Reset
         /// </summary>
         private Court GetCourtFromAPI(string CourtUrl)
         {
-            var http = new HttpClient();
+            Console.WriteLine("API Court "+ CourtUrl);
+            Request request = new Request();
+            Credentials credentials = new Credentials();
+            credentials.UserName = "Latyn";
+            credentials.Password = "Go0dGo0d";
+            request.Credentials = credentials;
 
-            // Configure the client
-            http.Request.Accept = HttpContentTypes.ApplicationJson;
-            http.Request.ForceBasicAuth = true;
-            http.Request.SetBasicAuthentication("peidelman", "Dyn4m1c5!");
-            var fullUrl = string.Format("{0}/{1}/{2}", CourtListenerUrl, "api/rest/v3/courts", CourtUrl + "/");
-            //fullUrl = fullUrl.Replace("//", "/");
+
+            var fullUrl = string.Format("{0}/{1}/{2}", CourtListenerUrl, "api/rest/v3/courts", CourtUrl + "/?format=json");
 
             // Retrieves the response from CourtListener API
-            var response = http.Get(fullUrl);
+            request.URL = fullUrl;
+
+            var data = request.Execute();
 
             // Verify if the response is good
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
+            if (request.HttpResponse.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 //throw new Exception("Failed to fetch court data from api");
                 return null;
             }
 
             // return deserialized court
-            return JsonConvert.DeserializeObject<Court>(response.RawText);
+            return JsonConvert.DeserializeObject<Court>(data);
         }
 
         /// <summary>
@@ -275,38 +313,48 @@ namespace Reseter.Courts_Reset
         /// </summary>
         private ApiDocument GetDocumentFromAPI(string DocumentUrl)
         {
+            Console.WriteLine("API Document");
             ApiDocument temp = new ApiDocument();
             var http = new HttpClient();
             var tempApiCluster = new APICluster();
+
             // Configure the client
-            http.Request.Accept = HttpContentTypes.ApplicationJson;
-            http.Request.ForceBasicAuth = true;
-            http.Request.SetBasicAuthentication("peidelman", "Dyn4m1c5!");
+            Request request = new Request();
+            Credentials credentials = new Credentials();
+            credentials.UserName = "Latyn";
+            credentials.Password = "Go0dGo0d";
+            request.Credentials = credentials;
+
+
             var query = string.Format("{0}/{1}/{2}", CourtListenerUrl, "api/rest/v3/clusters", DocumentUrl + "/?format=json");
             // Retrieves the response from CourtListener API
-            var response = http.Get(query);
+            request.URL = query;
+
+            var data = request.Execute();
 
             // Verify if the response is good
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
+            if (request.HttpResponse.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 //throw new Exception("Failed to fetch court data from api");
                 return null;
             }
 
-            tempApiCluster = JsonConvert.DeserializeObject<APICluster>(response.RawText);
+            tempApiCluster = JsonConvert.DeserializeObject<APICluster>(data);
 
-            var responseCourt = http.Get(tempApiCluster.Docket);
+            request.URL = tempApiCluster.Docket;
 
             // Verify if second the response is good
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
+            if (request.HttpResponse.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 //throw new Exception("Failed to fetch court data from api");
                 return null;
             }
+
+            data = request.Execute();
 
             // var responseCourt = http.Get(tempApiDocument.Docket);
             // return deserialized court
-            return JsonConvert.DeserializeObject<ApiDocument>(responseCourt.RawText);
+            return JsonConvert.DeserializeObject<ApiDocument>(data);
         }
 
         /// <summary>

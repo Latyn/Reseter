@@ -1,7 +1,7 @@
 ﻿using Newtonsoft.Json;
 using System.Collections.Generic;
 
-namespace Reseter.Entities
+namespace Reseter.RequestManager
 {
     public class ApiDocument
     {

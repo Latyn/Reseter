@@ -63,6 +63,8 @@
     <Compile Include="Entities\OpinionDocument.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RequestManager\Credentials.cs" />
+    <Compile Include="RequestManager\Request.cs" />
     <Compile Include="Utilities\StateDictionary.cs" />
   </ItemGroup>
   <ItemGroup>

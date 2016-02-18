@@ -1,3 +1,4 @@
 *.cache
 Reseter/Reseter/obj/Debug/DesignTimeResolveAssemblyReferencesInput.cache
 *.pdb
+*.suo

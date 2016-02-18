@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Reseter.Entities
+namespace Reseter.RequestManager
 {
     public class OpinionDocument
     {
