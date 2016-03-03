@@ -8,13 +8,17 @@ namespace Reseter.RequestManager
 {
     public class OpinionDocument
     {
-        public OpinionDocument(int _id, string _sourcefile) {
+        public OpinionDocument(int _id, string _sourcefile, string docketNumber) {
             Id = _id;
             SourceFile = _sourcefile;
+            Docket = docketNumber;
         }
 
         public int Id { set; get; }
 
         public string SourceFile { get; set; }
+
+
+        public string Docket { get; set; }
     }
 }

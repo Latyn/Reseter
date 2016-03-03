@@ -57,6 +57,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Courts Reset\APIReset.cs" />
+    <Compile Include="Entities\ApiDocket.cs" />
     <Compile Include="Entities\Cluster.cs" />
     <Compile Include="Entities\Court.cs" />
     <Compile Include="Entities\ApiDocument.cs" />

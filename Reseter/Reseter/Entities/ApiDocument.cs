@@ -24,6 +24,10 @@ namespace Reseter.RequestManager
         [JsonProperty("docket")]
         public string DocketUrl { get; set; } = string.Empty;
 
+        
+        [JsonProperty("case_name_full")]
+        public string caseNameFull { get; set; } = string.Empty;
+
         #endregion
     }
 

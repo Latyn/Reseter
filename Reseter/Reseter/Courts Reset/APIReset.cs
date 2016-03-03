@@ -20,6 +20,7 @@ namespace Reseter.Courts_Reset
         private string CourtListenerUrl = "https://www.courtlistener.com";
         private StateDictionary StatesDictionary;
         public Dictionary<string, string> CourtDictionary = new Dictionary<string, string>();
+        public int MenuOption;
 
         public APIReset()
         {
@@ -28,6 +29,7 @@ namespace Reseter.Courts_Reset
 
             // Initialize the bulk data path
             BulkDataPath = ConfigurationManager.AppSettings["BulkDataPath"];
+            MenuOption = int.Parse(ConfigurationManager.AppSettings["MenuOption"]);
 
             // Initialize the dictionary
             StatesDictionary = new StateDictionary();
@@ -36,10 +38,188 @@ namespace Reseter.Courts_Reset
             Console.WriteLine("Opening DB");
             m_db.Open();
         }
+        public void Menu()
+        {
+            switch (MenuOption)
+            {
+                case 1: Process();
+                    break;
+                case 2: CheckDockets();
+                    break;
+            }
+        }
+
+        private void CheckDockets()
+        {
+            DateTime start = DateTime.Now;
+            var count = 0;
+
+            Console.WriteLine("Fetching OpinionDocuments");
+            foreach (var Document in GetOpinionDocuments())
+            {
+                ApiDocument TempDocument = new ApiDocument();
+                count = count + 1;
+
+                Console.WriteLine("From " + start.ToString("HH:mm:ss") + " to " + DateTime.Now.ToString("HH:mm:ss"));
+               
+                //Console.WriteLine("Last : " + Document.Docket);
+
+                //Get soruce url to extract the number
+                var SourceNumber = Document.SourceFile.TrimEnd('/').Split('/').ToList().Last();
+                Console.WriteLine("Opinion : " + SourceNumber);
+                TempDocument = GetFromBulk(SourceNumber);
+
+                if (TempDocument != null)
+                {
+                    Console.WriteLine("Checking from Bulk " + count);
+                    if (TempDocument.Citation.Docket != "" & TempDocument.Citation.Docket != null)
+                    {
+                        //Console.WriteLine("TempDocument.Citation.Docket" + TempDocument.Citation.Docket);
+                        if (!UpdateDocket(TempDocument.Citation.Docket, Document.SourceFile)) {
+                            Console.WriteLine("Failed");
+                            Log(Document.Id.ToString());
+                        }
+
+                        continue;
+
+                        //else
+                        //{
+                        //    Console.WriteLine("New : " + TempDocument.Citation.Docket);
+                        //}
+                    }
+                    else
+                    {
+                        if (TempDocument.Docket != "" & TempDocument.Docket != null)
+                        {
+                            //Console.WriteLine("TempDocument.Docket" + TempDocument.Citation.Docket);
+                            //Console.WriteLine(TempDocument.Docket);
+
+                            if (!UpdateDocket(TempDocument.Docket, Document.SourceFile)) {
+                                Console.WriteLine("Failed");
+                                Log(Document.Id.ToString());
+                            }
+
+                            continue;
+
+                            //else
+                            //{
+                            //    Console.WriteLine("New : " + TempDocument.Docket);
+                            //}
+                        }
+                        else
+                        {
+                            ApiDocket newDocket = new ApiDocket();
+
+                            Console.WriteLine("Checking from API");
+                            newDocket = checkDocketfromAPI(SourceNumber);
+
+                            if (newDocket.Docket != null)
+                            {
+                                if (!UpdateDocket(newDocket.Docket, Document.SourceFile))
+                                {
+
+                                    Log(Document.Id.ToString());
+                                }
+
+                                continue;
+
+                                //else
+                                //{
+                                //    Console.WriteLine("New : " + newDocket.Docket);
+                                //}
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("No Bulk Data " + count);
+                    continue;
+                }
+            }
+        }
+
+        private ApiDocket checkDocketfromAPI(string docketUrl)
+        {
+            Console.WriteLine("API Document");
+            ApiDocument temp = new ApiDocument();
+            var http = new HttpClient();
+            var tempApiCluster = new APICluster();
+
+            // Configure the client
+            Request request = new Request();
+            Credentials credentials = new Credentials();
+            credentials.UserName = "peidelman";
+            credentials.Password = "Dyn4m1c5!";
+            request.Credentials = credentials;
+
+
+            var query = string.Format("{0}/{1}/{2}", CourtListenerUrl, "api/rest/v3/clusters/", docketUrl + "/?format=json");
+            // Retrieves the response from CourtListener API
+            request.URL = query;
+
+            var data = request.Execute();
+
+            // Verify if the response is good
+            if (request.HttpResponse.StatusCode != System.Net.HttpStatusCode.OK)
+            {
+                //throw new Exception("Failed to fetch court data from api");
+                return null;
+            }
+
+            tempApiCluster = JsonConvert.DeserializeObject<APICluster>(data);
+
+            request.URL = tempApiCluster.Docket;
+
+            // Verify if second the response is good
+            if (request.HttpResponse.StatusCode != System.Net.HttpStatusCode.OK)
+            {
+                //throw new Exception("Failed to fetch court data from api");
+                return null;
+            }
+
+            data = request.Execute();
+
+            // var responseCourt = http.Get(tempApiDocument.Docket);
+            // return deserialized court
+            return JsonConvert.DeserializeObject<ApiDocket>(data);
+        }
+
+        private bool UpdateDocket(string docket, string sourcefile)
+        {
+            var result = false;
+
+            using (var cmd = m_db.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"update OpinionDocuments
+                                    set DocketNumber = @value,
+                                    DataFixed = 'True'
+                                    where SourceFile = @sourcefile";
+                if (docket == null)
+                {
+                    cmd.Parameters.Add("value", SqlDbType.VarChar).Value = DBNull.Value;
+                }
+                else
+                {
+                    cmd.Parameters.Add("value", SqlDbType.VarChar).Value = docket;
+                }
+
+                cmd.Parameters.Add("sourcefile", SqlDbType.VarChar).Value = sourcefile;
+
+                if (cmd.ExecuteNonQuery() > 0)
+                {
+                    result = true;
+                }
+            }
+
+            return result;
+        }
 
         public void Process()
         {
-
+            try
+            {
                 var CourtDictionary = new Dictionary<string, string>();
                 var count = 0;
                 var ApiCount = 0;
@@ -66,26 +246,47 @@ namespace Reseter.Courts_Reset
 
                     if (TempDocument == null)
                     {
-                         ApiCount = ApiCount + 1;
-                         TempDocument = GetFromAPI(SourceNumber);
-
-                            // if it is not gotten from bulk or API set Datafixed as null  and go to next item
-                            if (TempDocument == null)
+                        ApiCount = ApiCount + 1;
+                        TempDocument = GetFromAPI(SourceNumber);
+                        if (TempDocument.caseName != "" & TempDocument.caseName != null )
+                        {
+                            Console.WriteLine(TempDocument.caseName);
+                            TempDocument.Citation.caseName = TempDocument.caseName;
+                        }
+                        else
+                        {
+                            if (TempDocument.caseNameFull != "" & TempDocument.caseNameFull != null)
                             {
-                                if (setDataFixed(Document.SourceFile))
-                                {
-                                    continue;
-                                }                                             
+                                Console.WriteLine(TempDocument.caseNameFull);
+                                TempDocument.Citation.caseName = TempDocument.caseNameFull;
                             }
+                        }
+
+                        // if it is not gotten from bulk or API set Datafixed as null  and go to next item
+                        if (TempDocument == null)
+                        {
+                            if (setDataFixed(Document.SourceFile))
+                            {
+                                Console.WriteLine("No Data");
+                                continue;
+                            }
+                        }
                     }
                     else
                     {
-                         BulkCount = BulkCount + 1;
+                        BulkCount = BulkCount + 1;
                     }
 
                     CheckCourts(TempDocument, Document, SourceNumber);
-                Console.WriteLine("Total= " + count + " Checked from API " + ApiCount + " Bulk " + BulkCount);
+                    Console.WriteLine("Total= " + count + " Checked from API " + ApiCount + " Bulk " + BulkCount);
+                }
             }
+            catch (Exception)
+            {
+
+                System.Environment.Exit(1);
+            }
+                
 
         }
         private bool setDataFixed(string SourceFile)
@@ -118,20 +319,19 @@ namespace Reseter.Courts_Reset
 
             if (TempDocument != null)
             {
-                var TempDocket = string.Empty;
+                //var TempDocket = string.Empty;
 
-                if (TempDocument.Docket == string.Empty)
-                {
-                    TempDocket = TempDocument.DocketUrl.TrimEnd('/').Split('/').ToList().Last();
-                    TempDocument.Docket = TempDocket;
+                //if (TempDocument.Docket == string.Empty)
+                //{
+                //    TempDocket = TempDocument.DocketUrl.TrimEnd('/').Split('/').ToList().Last();
+                //    TempDocument.Docket = TempDocket;
 
-                }
+                //}
                 if (TempDocument.Citation.Docket != null)
                 {
                     TempDocument.Docket = TempDocument.Citation.Docket;
                 }
 
-                TempDocument.caseName = TempDocument.Citation.caseName;
             }
 
             return TempDocument;
@@ -148,6 +348,7 @@ namespace Reseter.Courts_Reset
             {
                 //Value came from a diferent hierarchy so we get it and then stored at the same value than bulk data has
                 TempDocument.Citation.caseName = TempDocument.caseName;
+                Console.WriteLine(TempDocument.Citation.caseName);
             }
 
             return TempDocument;
@@ -215,7 +416,7 @@ namespace Reseter.Courts_Reset
         private void CheckCourt(Court TempCourt, ApiDocument TempDocument, OpinionDocument Document, string SourceNumber, string CourtId)
         {
             Document.SourceFile = "/api/rest/v3/opinions/" + SourceNumber + "/";
-
+            Console.WriteLine(TempDocument.Citation.caseName);
             // Verify if the state exists on the state dictionary
             if (StatesDictionary.GetDictionary().ContainsKey(CourtId))
             {
@@ -223,6 +424,7 @@ namespace Reseter.Courts_Reset
                 // Fetch the state from the state dictionary
                 string state = StatesDictionary.GetDictionary()[CourtId];
 
+                Console.WriteLine(TempDocument.Citation.caseName);
                 // Update the court and state of the Opiniond Document
                 if (UpdateDocumentValues(Document.Id, Document.SourceFile, TempCourt.Name, TempDocument.Citation.caseName, state, TempDocument.Docket))
                 {
@@ -242,7 +444,7 @@ namespace Reseter.Courts_Reset
             {
                 Console.WriteLine(m_db.State);
                 cmd.CommandTimeout = 0;
-                cmd.CommandText = @"select o.OpinionDocumentId, o.SourceFile
+                cmd.CommandText = @"select o.OpinionDocumentId, o.SourceFile, o.DocketNumber
                                     from OpinionDocuments as o
                                     where o.SourceFile like '%api%'
                                     and o.DataFixed = 0";
@@ -255,9 +457,10 @@ namespace Reseter.Courts_Reset
                     {
                         int Id = Convert.ToInt32(reader["OpinionDocumentId"]);
                         string SourceFile = reader["SourceFile"].ToString();
-                        yield return new OpinionDocument(Id, SourceFile);
+                        string Docket = reader["DocketNumber"].ToString();
+                        yield return new OpinionDocument(Id, SourceFile, Docket);
                     }
-                }
+                }              
             }
         }
 
@@ -285,8 +488,8 @@ namespace Reseter.Courts_Reset
             Console.WriteLine("API Court "+ CourtUrl);
             Request request = new Request();
             Credentials credentials = new Credentials();
-            credentials.UserName = "Latyn";
-            credentials.Password = "Go0dGo0d";
+            credentials.UserName = "peidelman";
+            credentials.Password = "Dyn4m1c5!";
             request.Credentials = credentials;
 
 
@@ -321,8 +524,8 @@ namespace Reseter.Courts_Reset
             // Configure the client
             Request request = new Request();
             Credentials credentials = new Credentials();
-            credentials.UserName = "Latyn";
-            credentials.Password = "Go0dGo0d";
+            credentials.UserName = "peidelman";
+            credentials.Password = "Dyn4m1c5!";
             request.Credentials = credentials;
 
 

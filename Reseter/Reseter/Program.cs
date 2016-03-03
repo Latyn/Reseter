@@ -6,7 +6,7 @@ namespace Reseter
     {
         static void Main(string[] args)
         {
-            new APIReset().Process();
+            new APIReset().Menu();
         }
     }
 }
